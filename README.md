@@ -4,7 +4,7 @@
 
 `!pip install -r requirements.txt`
 
-**Bước 2:** _cÁC BƯỚC TRAINING:_
+**Bước 2:** _CÁC BƯỚC TRAINING:_
 
 2.1 `python3 prepare_data.py`
 
