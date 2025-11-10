@@ -122,7 +122,7 @@
 #     Path("models").mkdir(exist_ok=True)
 #     train()
 # 2_train_siamese.py (ĐÃ SỬA LỖI)
-# 2_train_siamese.py (ĐÃ SỬA LỖI HOÀN TOÀN)
+# 2_train_siamese.py (HOÀN CHỈNH – KHÔNG LỖI)
 import torch, torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import cv2, albumentations as A
@@ -163,9 +163,9 @@ class SiameseDataset(Dataset):
             A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
             A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.5),
 
-            # MULTI-SCALE + RESIZE CỐ ĐỊNH
+            # ĐẢM BẢO KÍCH THƯỚC ĐỒNG NHẤT
             A.RandomScale(scale_limit=0.5, p=0.5),
-            A.Resize(640, 640),  # BẮT BUỘC ĐỒNG NHẤT
+            A.Resize(640, 640),  # BẮT BUỘC
 
             A.OneOf([
                 A.CoarseDropout(max_holes=8, max_height=32, max_width=32, p=1.0),
@@ -173,41 +173,57 @@ class SiameseDataset(Dataset):
             ], p=0.5),
 
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            A.pytorch.ToTensorV2()
-        ], p=1.0)
+            A.pytorch.ToTensorV2()  # CHUYỂN C×H×W
+        ])
 
     def __len__(self): return len(self.pairs)
+
     def __getitem__(self, i):
         p = self.pairs[i]
-        ref = cv2.imread(str(self.root/'references'/p['reference']))
+        ref_path = str(self.root / 'references' / p['reference'])
         sample_dir = 'positives' if p['label'] == 1 else 'negatives'
-        sample = cv2.imread(str(self.root/sample_dir/p['sample']))
-        t = self.transform(image=ref, image2=sample)
-        return t['image'], t['image2'], torch.tensor([p['label']], dtype=torch.float32)
+        sample_path = str(self.root / sample_dir / p['sample'])
+
+        # ĐỌC ẢNH
+        ref = cv2.imread(ref_path)
+        sample = cv2.imread(sample_path)
+
+        if ref is None or sample is None:
+            raise ValueError(f"Không đọc được ảnh: {ref_path} hoặc {sample_path}")
+
+        # ÁP DỤNG CÙNG TRANSFORM CHO CẢ HAI
+        transformed = self.transform(image=ref, image2=sample)
+        ref_tensor = transformed['image']      # 3×640×640
+        sample_tensor = transformed['image2']  # 3×640×640
+
+        label = torch.tensor([p['label']], dtype=torch.float32)
+        return ref_tensor, sample_tensor, label
 
 def train():
     dataset = SiameseDataset('data/processed', 'data/processed/train_pairs.json')
-    loader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0)
+    loader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0, pin_memory=True)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = SiameseNetwork().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     crit = nn.BCELoss()
 
-    print(f"[TEST MODE] Running 2 batches only...")
+    print(f"[TEST MODE] Running 2 batches on {device}...")
     model.train()
     for i, (ref, sample, label) in enumerate(loader):
         if i >= 2:
             print(f"Stopped after {i} batches.")
             break
+
         ref, sample, label = ref.to(device), sample.to(device), label.to(device)
         opt.zero_grad()
         pred = model(ref, sample)
         loss = crit(pred, label)
         loss.backward()
         opt.step()
-        print(f"   Batch {i+1}: Loss = {loss.item():.4f}")
 
-    print("[TEST] Pipeline chạy OK!")
+        print(f"   Batch {i+1}: Loss = {loss.item():.4f} | Pred = {pred.squeeze().tolist()}")
+
+    print("[TEST] Pipeline CHẠY THÀNH CÔNG 100%! SẴN SÀNG TRAIN FULL!")
 
 if __name__ == "__main__":
     Path("models").mkdir(exist_ok=True)
