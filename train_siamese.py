@@ -65,34 +65,59 @@ class SiameseDataset(Dataset):
         t = self.transform(image=ref, image2=sample)
         return t['image'], t['image2'], torch.tensor([p['label']], dtype=torch.float32)
 
+# def train():
+#     dataset = SiameseDataset('data/processed', 'data/processed/train_pairs.json')
+#     loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=4, pin_memory=True)
+#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#     model = SiameseNetwork().to(device)
+#     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+#     crit = nn.BCELoss()
+
+#     print(f"[2] Training on {device}")
+#     for epoch in range(40):
+#         model.train()
+#         loss_sum = correct = total = 0
+#         for ref, sample, label in tqdm(loader, desc=f"Epoch {epoch+1}"):
+#             ref, sample, label = ref.to(device), sample.to(device), label.to(device)
+#             opt.zero_grad()
+#             pred = model(ref, sample)
+#             loss = crit(pred, label)
+#             loss.backward()
+#             opt.step()
+#             loss_sum += loss.item()
+#             correct += ((pred > 0.5) == label).sum().item()
+#             total += label.size(0)
+#         print(f"   Loss: {loss_sum/len(loader):.4f} | Acc: {correct/total:.4f}")
+#         if (epoch+1) % 10 == 0:
+#             torch.save(model.state_dict(), f"models/siamese_epoch{epoch+1}.pth")
+#     torch.save(model.state_dict(), "models/siamese_final.pth")
+#     print("[2] DONE!")
 def train():
     dataset = SiameseDataset('data/processed', 'data/processed/train_pairs.json')
-    loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=4, pin_memory=True)
+    loader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0)  # batch nhỏ
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = SiameseNetwork().to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     crit = nn.BCELoss()
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    print(f"[2] Training on {device}")
-    for epoch in range(40):
-        model.train()
-        loss_sum = correct = total = 0
-        for ref, sample, label in tqdm(loader, desc=f"Epoch {epoch+1}"):
-            ref, sample, label = ref.to(device), sample.to(device), label.to(device)
-            opt.zero_grad()
-            pred = model(ref, sample)
-            loss = crit(pred, label)
-            loss.backward()
-            opt.step()
-            loss_sum += loss.item()
-            correct += ((pred > 0.5) == label).sum().item()
-            total += label.size(0)
-        print(f"   Loss: {loss_sum/len(loader):.4f} | Acc: {correct/total:.4f}")
-        if (epoch+1) % 10 == 0:
-            torch.save(model.state_dict(), f"models/siamese_epoch{epoch+1}.pth")
-    torch.save(model.state_dict(), "models/siamese_final.pth")
-    print("[2] DONE!")
+    print(f"[TEST MODE] Running 2 batches only...")
+    model.train()
+    for i, (ref, sample, label) in enumerate(loader):
+        if i >= 2:  # DỪNG SAU 2 BATCH
+            print(f"Stopped after {i} batches.")
+            break
+            
+        ref, sample, label = ref.to(device), sample.to(device), label.to(device)
+        opt.zero_grad()
+        pred = model(ref, sample)
+        loss = crit(pred, label)
+        loss.backward()
+        opt.step()
+        
+        print(f"   Batch {i+1}: Loss = {loss.item():.4f} | Pred = {pred.squeeze().tolist()}")
 
+    print("[TEST] Pipeline chạy OK! Có thể train full.")
 if __name__ == "__main__":
     Path("models").mkdir(exist_ok=True)
     train()

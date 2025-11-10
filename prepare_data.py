@@ -29,7 +29,7 @@ class DataPreparation:
 
         print(f"[1] Loaded {len(self.annotations)} videos from {self.annotations_path.parent}")
 
-    def prepare(self, output_dir, samples_per_video=50, neg_per_ref=15, target_size=640):
+    def prepare(self, output_dir, samples_per_video=50, neg_per_ref=15, target_size=640,max_videos=1):
         out = Path(output_dir)
         pos_dir = out / 'positives'
         neg_dir = out / 'negatives'
@@ -38,8 +38,10 @@ class DataPreparation:
 
         pairs = []
         print("[1] Extracting 640x640 RAW patches...")
-
+        count = 0
         for video_data in tqdm(self.annotations):
+            if count >= max_videos:
+                break
             vid = video_data['video_id']
             bboxes = video_data['annotations'][0]['bboxes']
             folder = self.video_to_folder.get(vid)
@@ -48,7 +50,7 @@ class DataPreparation:
             video_path = folder / 'drone_video.mp4'
             ref_dir_path = folder / 'object_images'
             if not video_path.exists() or not ref_dir_path.exists(): continue
-
+            count += 1
             # === Copy 3 references (640x640 RAW) ===
             refs = sorted(ref_dir_path.glob('*.jpg'))[:3]
             if len(refs) < 3: continue
@@ -125,4 +127,4 @@ class DataPreparation:
 
 if __name__ == "__main__":
     prep = DataPreparation('train')
-    prep.prepare('data/processed', target_size=640)
+    prep.prepare('data/processed', max_videos=1, samples_per_video=10,target_size=640)
