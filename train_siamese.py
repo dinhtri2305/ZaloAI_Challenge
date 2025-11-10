@@ -122,7 +122,8 @@
 #     Path("models").mkdir(exist_ok=True)
 #     train()
 # 2_train_siamese.py (ĐÃ SỬA LỖI)
-import torch, torch.nn as nn, torch.nn.functional as F
+# 2_train_siamese.py (ĐÃ SỬA LỖI HOÀN TOÀN)
+import torch, torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import cv2, albumentations as A
 from pathlib import Path
@@ -151,30 +152,26 @@ class SiameseDataset(Dataset):
         self.root = Path(root)
         self.pairs = json.loads(Path(json_file).read_text())
         self.transform = self._get_transform()
+
     def _get_transform(self):
         return A.Compose([
-            # PREPROCESSING
             A.CLAHE(clip_limit=2.0, tile_grid_size=(8,8), p=0.8),
-            A.GaussNoise(var_limit=(10.0, 50.0), p=0.3),  # SỬA: var_limit đúng
-
-            # AUGMENTATION
+            A.GaussNoise(var_limit=(10.0, 50.0), p=0.3),
             A.Rotate(limit=180, p=0.8),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
             A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.5),
 
-            # THAY THẾ Mosaic + MixUp
+            # MULTI-SCALE + RESIZE CỐ ĐỊNH
+            A.RandomScale(scale_limit=0.5, p=0.5),
+            A.Resize(640, 640),  # BẮT BUỘC ĐỒNG NHẤT
+
             A.OneOf([
-                A.RandomCrop(width=512, height=512, p=1.0),
                 A.CoarseDropout(max_holes=8, max_height=32, max_width=32, p=1.0),
+                A.GridDropout(ratio=0.4, p=1.0),
             ], p=0.5),
 
-            # MULTI-SCALE
-            A.RandomScale(scale_limit=0.5, p=0.5),
-            A.PadIfNeeded(640, 640, border_mode=cv2.BORDER_CONSTANT),
-
-            # FINAL
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             A.pytorch.ToTensorV2()
         ], p=1.0)
