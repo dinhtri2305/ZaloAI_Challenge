@@ -1,4 +1,4 @@
-# 1_prepare_data.py
+# 1_prepare_data.py (FULL TRAINING - TẤT CẢ VIDEO)
 import cv2
 import numpy as np
 import json
@@ -29,19 +29,22 @@ class DataPreparation:
 
         print(f"[1] Loaded {len(self.annotations)} videos from {self.annotations_path.parent}")
 
-    def prepare(self, output_dir, samples_per_video=50, neg_per_ref=15, target_size=640,max_videos=1):
+    def prepare(self, output_dir, samples_per_video=50, neg_per_ref=15, target_size=640):
+        """
+        FULL TRAINING MODE: Xử lý TẤT CẢ video
+        """
         out = Path(output_dir)
         pos_dir = out / 'positives'
         neg_dir = out / 'negatives'
         ref_dir = out / 'references'
-        for d in [pos_dir, neg_dir, ref_dir]: d.mkdir(parents=True, exist_ok=True)
+        for d in [pos_dir, neg_dir, ref_dir]:
+            d.mkdir(parents=True, exist_ok=True)
 
         pairs = []
-        print("[1] Extracting 640x640 RAW patches...")
-        count = 0
-        for video_data in tqdm(self.annotations):
-            if count >= max_videos:
-                break
+        print("[1] Extracting 640x640 RAW patches từ TẤT CẢ video...")
+        processed_count = 0
+
+        for video_data in tqdm(self.annotations, desc="Processing videos"):
             vid = video_data['video_id']
             bboxes = video_data['annotations'][0]['bboxes']
             folder = self.video_to_folder.get(vid)
@@ -50,12 +53,18 @@ class DataPreparation:
             video_path = folder / 'drone_video.mp4'
             ref_dir_path = folder / 'object_images'
             if not video_path.exists() or not ref_dir_path.exists(): continue
-            count += 1
+
+            processed_count += 1
+
             # === Copy 3 references (640x640 RAW) ===
             refs = sorted(ref_dir_path.glob('*.jpg'))[:3]
-            if len(refs) < 3: continue
+            if len(refs) < 3:
+                print(f"Warning: {vid} chỉ có {len(refs)} ảnh reference → bỏ qua")
+                continue
+
             for i, src in enumerate(refs):
                 img = cv2.imread(str(src))
+                if img is None: continue
                 img = cv2.resize(img, (target_size, target_size))
                 dst = ref_dir / f"{vid}_{i+1}.jpg"
                 cv2.imwrite(str(dst), img)
@@ -63,6 +72,10 @@ class DataPreparation:
             # === Extract positive ROIs (640x640 RAW) ===
             cap = cv2.VideoCapture(str(video_path))
             frame_ids = sorted([b['frame'] for b in bboxes])
+            if len(frame_ids) < 2:
+                cap.release()
+                continue
+
             sampled = np.linspace(0, len(frame_ids)-1, min(samples_per_video, len(frame_ids)), dtype=int)
 
             for idx in sampled:
@@ -78,6 +91,7 @@ class DataPreparation:
                 roi_name = f"{vid}_f{f_id}.jpg"
                 cv2.imwrite(str(pos_dir / roi_name), roi)
 
+                # Tạo 3 positive pairs với 3 references
                 for i in range(1, 4):
                     pairs.append({
                         'reference': f"{vid}_{i}.jpg",
@@ -88,18 +102,22 @@ class DataPreparation:
             cap.release()
 
         # === Negative pairs ===
-        print(f"[1] Generating {neg_per_ref} negatives/ref...")
+        print(f"[1] Generating {neg_per_ref} negatives/ref từ {len(pairs)} positives...")
         video_ids = list({p['video_id'] for p in pairs if p['label'] == 1})
-        for ref_file in ref_dir.glob('*.jpg'):
+        ref_files = list(ref_dir.glob('*.jpg'))
+
+        for ref_file in tqdm(ref_files, desc="Generating negatives"):
             ref_vid = '_'.join(ref_file.stem.split('_')[:-1])
             others = [v for v in video_ids if v != ref_vid]
             if not others: continue
+
             for ovid in random.sample(others, min(neg_per_ref, len(others))):
                 crops = list(pos_dir.glob(f"{ovid}_f*.jpg"))
                 if not crops: continue
                 crop = random.choice(crops)
                 neg_path = neg_dir / crop.name
-                shutil.copy(crop, neg_path)
+                if not neg_path.exists():
+                    shutil.copy(crop, neg_path)
                 pairs.append({
                     'reference': ref_file.name,
                     'sample': crop.name,
@@ -107,9 +125,14 @@ class DataPreparation:
                     'video_id': ref_vid
                 })
 
-        # Save
-        (out / 'train_pairs.json').write_text(json.dumps(pairs, indent=2))
-        print(f"[1] DONE! {len(pairs)} pairs → {out}")
+        # === Save ===
+        json_path = out / 'train_pairs.json'
+        json_path.write_text(json.dumps(pairs, indent=2))
+        print(f"[1] FULL PREPARATION HOÀN TẤT!")
+        print(f"   → {processed_count} videos")
+        print(f"   → {len(pairs)} training pairs")
+        print(f"   → Output: {out}")
+        print(f"   → Tiếp theo: python 2_train_siamese.py full")
 
     def _crop_and_resize(self, frame, bbox, target_size=640, scale=1.5):
         h, w = frame.shape[:2]
@@ -125,6 +148,12 @@ class DataPreparation:
         roi = frame[ry1:ry2, rx1:rx2]
         return cv2.resize(roi, (target_size, target_size))
 
+# ===================== MAIN =====================
 if __name__ == "__main__":
     prep = DataPreparation('train')
-    prep.prepare('data/processed', max_videos=1, samples_per_video=10,target_size=640)
+    prep.prepare(
+        output_dir='data/processed',
+        samples_per_video=100,      # 100 frame/video
+        neg_per_ref=15,            # 15 negative/ref
+        target_size=640            # 640x640
+    )
