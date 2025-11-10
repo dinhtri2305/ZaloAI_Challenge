@@ -1,0 +1,6 @@
+# Dữ liệu thô (chạy lại trên Colab)
+train/
+data/processed/
+models/
+*.pth
+__pycache__/

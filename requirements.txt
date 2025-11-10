@@ -1,0 +1,6 @@
+torch
+torchvision
+ultralytics
+albumentations
+opencv-python
+tqdm
