@@ -1,3 +1,16 @@
+# Cài đặt thư mục
+
+ZaloAI_Challenge/
+├── train/ ← Dữ liệu gốc
+├── data/processed/ ← Output: ảnh 640x640 + train_pairs.json
+├── models/ ← .pth weights
+├── 1_prepare_data.py ← Crop 640x640 RAW
+├── 2_train_siamese.py ← Train Siamese 640x640
+├── 3_infer_video.py ← Inference (YOLO + Siamese)
+├── pipeline.py ← Chạy full pipeline
+├── requirements.txt
+└── README.md
+
 # HƯỚNG DẪN CHẠY CODE:
 
 **Bước 1:** _Cài đặt thư viện bên trong requirements.txt:_
