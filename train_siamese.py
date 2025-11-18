@@ -82,7 +82,7 @@ def train_full():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = SiameseNetwork().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', patience=5, factor=0.5, verbose=True)  # FIXED
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', patience=5, factor=0.5) # FIXED
     crit = nn.BCELoss()
     best_loss = float('inf')
     Path("models").mkdir(exist_ok=True)
